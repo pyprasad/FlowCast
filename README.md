@@ -18,6 +18,34 @@ CreatorFlow is built on a **loosely coupled microservices architecture** with th
 - **AI Advisor Service** (Port 4009): Content recommendations
 - **Web Frontend** (Port 5173): React + TypeScript + Tailwind
 
+## 🚀 Phase 2: Advanced Creator Intelligence (NEW!)
+
+Phase 2 dramatically extends CreatorFlow with advanced, AI-powered features:
+
+1. **Auto-Viral Optimization Engine** - Analyzes videos pre-publish with actionable suggestions (hook strength, pacing, silence detection)
+2. **CreatorPreset™** - Style templates (MrBeast, Podcast, Meme, etc.) with one-click application
+3. **AI Thumbnail Frame Injection** - Generate high-impact frames for platform thumbnails
+4. **Real-Time Performance Prediction** - Predict views/engagement before posting
+5. **Competitor Intelligence** - Track competitor content and performance
+6. **AI Comment Moderator** - Auto-classify and suggest replies in your brand voice
+7. **A/B Testing** - Run experiments with multiple video variants
+8. **Creator "Brain"** - Knowledge graph of your content with opportunity detection
+9. **Content Recycler** - Identify high-potential old videos to repost
+10. **Weekly Growth Report** - Automated digest with insights and recommendations
+
+**📖 See `docs/PHASE2_IMPLEMENTATION.md` for complete implementation details**
+
+**New Services:**
+- **Competitor Service** (Port 4010): Track and analyze competitor activity
+- **Presets Package**: Shared library of style templates
+
+**Extended Services:**
+- AI Service: +6 new intelligence modules
+- Video Service: +Preset application, thumbnail injection
+- Scheduler Service: +A/B testing experiments
+- Analytics Service: +Competitor data integration
+- Comments Service: +AI classification
+
 ## 📁 Repository Structure
 
 ```

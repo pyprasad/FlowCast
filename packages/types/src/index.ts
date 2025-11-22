@@ -590,3 +590,8 @@ export enum Environment {
   PRODUCTION = 'production',
   TEST = 'test',
 }
+
+// ============================================================================
+// PHASE 2 EXPORTS - Advanced Creator Intelligence Features
+// ============================================================================
+export * from './phase2';
