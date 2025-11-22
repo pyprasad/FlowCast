@@ -1,0 +1,22 @@
+{
+  "name": "@creatorflow/logger",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pino": "^8.16.2",
+    "pino-pretty": "^10.2.3"
+  },
+  "devDependencies": {
+    "@creatorflow/tsconfig": "workspace:*",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3"
+  }
+}

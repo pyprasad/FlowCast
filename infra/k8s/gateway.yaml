@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+  namespace: creatorflow
+data:
+  PORT: "4000"
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  AUTH_SERVICE_URL: "http://auth-service:4001"
+  BILLING_SERVICE_URL: "http://billing-service:4002"
+  API_KEYS_SERVICE_URL: "http://api-keys-service:4003"
+  PLATFORM_SERVICE_URL: "http://platform-service:4004"
+  VIDEO_SERVICE_URL: "http://video-service:4005"
+  SCHEDULER_SERVICE_URL: "http://scheduler-service:4006"
+  ANALYTICS_SERVICE_URL: "http://analytics-service:4007"
+  COMMENTS_SERVICE_URL: "http://comments-service:4008"
+  AI_SERVICE_URL: "http://ai-service:4009"
+  RATE_LIMIT_WINDOW_MS: "60000"
+  RATE_LIMIT_MAX_REQUESTS: "100"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gateway-secret
+  namespace: creatorflow
+type: Opaque
+stringData:
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: CHANGE_ME_IN_PRODUCTION_STRONG_SECRET
+  CORS_ORIGINS: https://app.creatorflow.com
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: creatorflow
+  labels:
+    app: gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: creatorflow/gateway:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: gateway-config
+            - secretRef:
+                name: gateway-secret
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: creatorflow
+spec:
+  selector:
+    app: gateway
+  ports:
+    - port: 4000
+      targetPort: 4000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway-ingress
+  namespace: creatorflow
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.creatorflow.com
+      secretName: gateway-tls
+  rules:
+    - host: api.creatorflow.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 4000

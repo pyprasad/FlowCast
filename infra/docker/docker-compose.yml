@@ -1,0 +1,298 @@
+version: '3.8'
+
+services:
+  # Infrastructure
+  postgres:
+    image: postgres:15-alpine
+    container_name: creatorflow-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: creatorflow
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: creatorflow-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Microservices
+  auth-service:
+    build:
+      context: ../../
+      dockerfile: ./infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: auth-service
+    container_name: creatorflow-auth
+    environment:
+      NODE_ENV: development
+      PORT: 4001
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/creatorflow_auth?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-secret-change-in-production
+      JWT_ACCESS_EXPIRY: 15m
+      JWT_REFRESH_EXPIRY: 7d
+      EMAIL_PROVIDER_API_KEY: mock
+      EMAIL_FROM: noreply@creatorflow.app
+      BCRYPT_ROUNDS: 10
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - '4001:4001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../apps/auth-service:/app/apps/auth-service
+      - /app/node_modules
+    command: pnpm --filter @creatorflow/auth-service dev
+
+  billing-service:
+    build:
+      context: ../../
+      dockerfile: ./infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: billing-service
+    container_name: creatorflow-billing
+    environment:
+      NODE_ENV: development
+      PORT: 4002
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/creatorflow_billing?schema=public
+      REDIS_URL: redis://redis:6379
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_fake}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_fake}
+      STRIPE_PRICE_ID_CREATOR: ${STRIPE_PRICE_ID_CREATOR:-price_fake_creator}
+      STRIPE_PRICE_ID_AGENCY: ${STRIPE_PRICE_ID_AGENCY:-price_fake_agency}
+      STRIPE_PRICE_ID_ENTERPRISE: ${STRIPE_PRICE_ID_ENTERPRISE:-price_fake_enterprise}
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - '4002:4002'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  platform-service:
+    build:
+      context: ../../
+      dockerfile: ./infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: platform-service
+    container_name: creatorflow-platform
+    environment:
+      NODE_ENV: development
+      PORT: 4004
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/creatorflow_platform?schema=public
+      REDIS_URL: redis://redis:6379
+      TIKTOK_CLIENT_ID: ${TIKTOK_CLIENT_ID:-fake}
+      TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-fake}
+      TIKTOK_REDIRECT_URI: http://localhost:4000/platforms/callback/tiktok
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-fake}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-fake}
+      YOUTUBE_REDIRECT_URI: http://localhost:4000/platforms/callback/youtube
+      INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-fake}
+      INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-fake}
+      INSTAGRAM_REDIRECT_URI: http://localhost:4000/platforms/callback/instagram
+      ENCRYPTION_KEY: dev-encryption-key-32-chars-min
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - '4004:4004'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  video-service:
+    build:
+      context: ../../
+      dockerfile: ./infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: video-service
+    container_name: creatorflow-video
+    environment:
+      NODE_ENV: development
+      PORT: 4005
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/creatorflow_video?schema=public
+      REDIS_URL: redis://redis:6379
+      STORAGE_PROVIDER: local
+      STORAGE_LOCAL_PATH: /app/storage
+      FFMPEG_PATH: ffmpeg
+      MAX_FILE_SIZE_MB: 500
+      TEMP_DIR: /tmp/creatorflow
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - '4005:4005'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - video_storage:/app/storage
+
+  scheduler-service:
+    build:
+      context: ../../
+      dockerfile: ./infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: scheduler-service
+    container_name: creatorflow-scheduler
+    environment:
+      NODE_ENV: development
+      PORT: 4006
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/creatorflow_scheduler?schema=public
+      REDIS_URL: redis://redis:6379
+      PLATFORM_SERVICE_URL: http://platform-service:4004
+      VIDEO_SERVICE_URL: http://video-service:4005
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - '4006:4006'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  analytics-service:
+    build:
+      context: ../../
+      dockerfile: ./infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: analytics-service
+    container_name: creatorflow-analytics
+    environment:
+      NODE_ENV: development
+      PORT: 4007
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/creatorflow_analytics?schema=public
+      REDIS_URL: redis://redis:6379
+      SYNC_INTERVAL_MINUTES: 60
+      BATCH_SIZE: 50
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - '4007:4007'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  comments-service:
+    build:
+      context: ../../
+      dockerfile: ./infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: comments-service
+    container_name: creatorflow-comments
+    environment:
+      NODE_ENV: development
+      PORT: 4008
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/creatorflow_comments?schema=public
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - '4008:4008'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ai-service:
+    build:
+      context: ../../
+      dockerfile: ./infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: ai-service
+    container_name: creatorflow-ai
+    environment:
+      NODE_ENV: development
+      PORT: 4009
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/creatorflow_ai?schema=public
+      REDIS_URL: redis://redis:6379
+      AI_PROVIDER: local
+      AI_MAX_TOKENS: 4000
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - '4009:4009'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  gateway:
+    build:
+      context: ../../
+      dockerfile: ./infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: gateway
+    container_name: creatorflow-gateway
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      REDIS_URL: redis://redis:6379
+      AUTH_SERVICE_URL: http://auth-service:4001
+      BILLING_SERVICE_URL: http://billing-service:4002
+      API_KEYS_SERVICE_URL: http://api-keys-service:4003
+      PLATFORM_SERVICE_URL: http://platform-service:4004
+      VIDEO_SERVICE_URL: http://video-service:4005
+      SCHEDULER_SERVICE_URL: http://scheduler-service:4006
+      ANALYTICS_SERVICE_URL: http://analytics-service:4007
+      COMMENTS_SERVICE_URL: http://comments-service:4008
+      AI_SERVICE_URL: http://ai-service:4009
+      RATE_LIMIT_WINDOW_MS: 60000
+      RATE_LIMIT_MAX_REQUESTS: 100
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+      JWT_SECRET: dev-secret-change-in-production
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/creatorflow_gateway?schema=public
+    ports:
+      - '4000:4000'
+    depends_on:
+      - auth-service
+      - billing-service
+      - platform-service
+      - video-service
+      - scheduler-service
+      - analytics-service
+      - comments-service
+      - ai-service
+
+  # Frontend
+  web-frontend:
+    build:
+      context: ../../
+      dockerfile: ./infra/docker/Dockerfile.frontend
+    container_name: creatorflow-web
+    environment:
+      VITE_API_URL: http://localhost:4000
+    ports:
+      - '5173:5173'
+    volumes:
+      - ../../apps/web-frontend:/app/apps/web-frontend
+      - /app/node_modules
+    command: pnpm --filter @creatorflow/web-frontend dev
+
+volumes:
+  postgres_data:
+  redis_data:
+  video_storage:

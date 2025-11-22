@@ -1,0 +1,37 @@
+FROM node:20-alpine AS base
+
+# Install pnpm
+RUN npm install -g pnpm@8.12.0
+
+# Install ffmpeg for video processing
+RUN apk add --no-cache ffmpeg
+
+WORKDIR /app
+
+# Copy workspace files
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY turbo.json ./
+
+# Copy all packages and apps
+COPY packages ./packages
+COPY apps ./apps
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Build shared packages
+RUN pnpm --filter @creatorflow/types build
+RUN pnpm --filter @creatorflow/config build
+RUN pnpm --filter @creatorflow/logger build
+
+# Build all services
+RUN pnpm build
+
+# Expose port
+ARG SERVICE_NAME
+ENV SERVICE_NAME=${SERVICE_NAME}
+
+EXPOSE 4000-4009
+
+# Start the service
+CMD pnpm --filter @creatorflow/${SERVICE_NAME} start
